@@ -83,3 +83,36 @@ def calculate_boq_total(project_id):
         total += item.amount
 
     return total
+
+def get_material_price(material_name):
+    from app.models import MaterialPrice
+
+    material_price = MaterialPrice.query.filter_by(
+        material_name=material_name
+    ).first()
+
+    if material_price:
+        return material_price.current_price
+
+    return 0
+
+
+def generate_boq_from_material_prices(project_id):
+    electrical_points = get_project_electrical_points(project_id)
+
+    boq_items = []
+
+    for point in electrical_points:
+        unit_price = get_material_price(point.point_type)
+
+        boq_item = create_boq_from_electrical_point(
+            project_id=project_id,
+            point_type=point.point_type,
+            quantity=point.quantity,
+            unit="pcs",
+            unit_price=unit_price,
+        )
+
+        boq_items.append(boq_item)
+
+    return boq_items
