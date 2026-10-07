@@ -92,9 +92,15 @@ def get_material_price(material_name):
     ).first()
 
     if material_price:
-        return material_price.current_price
+        return {
+            "price": material_price.current_price,
+            "unit": material_price.unit,
+        }
 
-    return 0
+    return {
+        "price": 0,
+        "unit": "pcs",
+    }
 
 
 def generate_boq_from_material_prices(project_id):
@@ -105,14 +111,14 @@ def generate_boq_from_material_prices(project_id):
     boq_items = []
 
     for point in electrical_points:
-        unit_price = get_material_price(point.point_type)
+        material_price = get_material_price(point.point_type)
 
         boq_item = create_boq_from_electrical_point(
             project_id=project_id,
             point_type=point.point_type,
             quantity=point.quantity,
-            unit="pcs",
-            unit_price=unit_price,
+            unit=material_price["unit"],
+            unit_price=material_price["price"],
         )
 
         boq_items.append(boq_item)
