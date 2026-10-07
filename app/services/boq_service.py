@@ -32,3 +32,21 @@ def create_boq_item(
     db.session.commit()
 
     return boq_item
+
+
+def create_boq_from_electrical_point(
+    project_id,
+    point_type,
+    quantity,
+    unit,
+    unit_price,
+):
+    return create_boq_item(
+        project_id=project_id,
+        description=point_type,
+        specification=None,
+        quantity=quantity,
+        unit=unit,
+        unit_price=unit_price,
+        quantity_source="Electrical Point",
+    )
