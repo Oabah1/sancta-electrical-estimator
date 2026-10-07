@@ -94,3 +94,12 @@ class MaterialPrice(db.Model):
     current_price = db.Column(db.Float, nullable=False)
     supplier = db.Column(db.String(150), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Labour(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    calculation_method = db.Column(db.String(50), nullable=False)
+    rate = db.Column(db.Float, nullable=False)
+    description = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
