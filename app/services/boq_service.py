@@ -1,5 +1,5 @@
 from app import db
-from app.models import BOQItem
+from app.models import BOQItem, ElectricalPoint
 
 
 def calculate_amount(quantity, unit_price):
@@ -50,3 +50,6 @@ def create_boq_from_electrical_point(
         unit_price=unit_price,
         quantity_source="Electrical Point",
     )
+
+def get_project_electrical_points(project_id):
+    return ElectricalPoint.query.filter_by(project_id=project_id).all()
