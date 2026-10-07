@@ -85,3 +85,12 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False, default="Technician")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class MaterialPrice(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    material_name = db.Column(db.String(150), nullable=False)
+    unit = db.Column(db.String(50), nullable=False)
+    current_price = db.Column(db.Float, nullable=False)
+    supplier = db.Column(db.String(150), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
