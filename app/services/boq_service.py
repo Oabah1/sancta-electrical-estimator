@@ -2,6 +2,10 @@ from app import db
 from app.models import BOQItem
 
 
+def calculate_amount(quantity, unit_price):
+    return quantity * unit_price
+
+
 def create_boq_item(
     project_id,
     description,
@@ -11,7 +15,7 @@ def create_boq_item(
     unit_price,
     quantity_source=None,
 ):
-    amount = quantity * unit_price
+    amount = calculate_amount(quantity, unit_price)
 
     boq_item = BOQItem(
         project_id=project_id,
