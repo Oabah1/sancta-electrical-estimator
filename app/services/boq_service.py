@@ -98,6 +98,8 @@ def get_material_price(material_name):
 
 
 def generate_boq_from_material_prices(project_id):
+    clear_electrical_point_boq_items(project_id)
+
     electrical_points = get_project_electrical_points(project_id)
 
     boq_items = []
@@ -116,3 +118,15 @@ def generate_boq_from_material_prices(project_id):
         boq_items.append(boq_item)
 
     return boq_items
+
+
+def clear_electrical_point_boq_items(project_id):
+    boq_items = BOQItem.query.filter_by(
+        project_id=project_id,
+        quantity_source="Electrical Point",
+    ).all()
+
+    for item in boq_items:
+        db.session.delete(item)
+
+    db.session.commit()
