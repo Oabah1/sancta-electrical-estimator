@@ -53,7 +53,7 @@ def create_boq_from_electrical_point(
 
 def get_project_electrical_points(project_id):
     return ElectricalPoint.query.filter_by(project_id=project_id).all()
-    
+
 def generate_boq_from_electrical_points(project_id, unit_prices):
     electrical_points = get_project_electrical_points(project_id)
 
@@ -73,3 +73,13 @@ def generate_boq_from_electrical_points(project_id, unit_prices):
         boq_items.append(boq_item)
 
     return boq_items
+
+def calculate_boq_total(project_id):
+    boq_items = BOQItem.query.filter_by(project_id=project_id).all()
+
+    total = 0
+
+    for item in boq_items:
+        total += item.amount
+
+    return total
