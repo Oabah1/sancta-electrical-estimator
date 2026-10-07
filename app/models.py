@@ -103,3 +103,16 @@ class Labour(db.Model):
     rate = db.Column(db.Float, nullable=False)
     description = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class BOQItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    description = db.Column(db.String(200), nullable=False)
+    specification = db.Column(db.String(200), nullable=True)
+    quantity = db.Column(db.Float, nullable=False, default=0)
+    unit = db.Column(db.String(50), nullable=False)
+    unit_price = db.Column(db.Float, nullable=False, default=0)
+    amount = db.Column(db.Float, nullable=False, default=0)
+    quantity_source = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
