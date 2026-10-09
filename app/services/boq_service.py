@@ -3,6 +3,7 @@ from app.models import BOQItem, ElectricalPoint
 
 
 def calculate_amount(quantity, unit_price):
+    """Calculate the total amount for a BOQ item."""
     return quantity * unit_price
 
 
@@ -15,6 +16,8 @@ def create_boq_item(
     unit_price,
     quantity_source=None,
 ):
+    """Create and save one BOQ item."""
+
     amount = calculate_amount(quantity, unit_price)
 
     boq_item = BOQItem(
@@ -41,6 +44,8 @@ def create_boq_from_electrical_point(
     unit,
     unit_price,
 ):
+    """Create a BOQ item from an electrical point."""
+
     return create_boq_item(
         project_id=project_id,
         description=point_type,
@@ -53,12 +58,17 @@ def create_boq_from_electrical_point(
 
 
 def get_project_electrical_points(project_id):
-    return ElectricalPoint.query.filter_by(project_id=project_id).all()
+    """Retrieve all electrical points for a project."""
+
+    return ElectricalPoint.query.filter_by(
+        project_id=project_id
+    ).all()
 
 
 def generate_boq_from_electrical_points(project_id, unit_prices):
-    electrical_points = get_project_electrical_points(project_id)
+    """Generate BOQ items using supplied unit prices."""
 
+    electrical_points = get_project_electrical_points(project_id)
     boq_items = []
 
     for point in electrical_points:
@@ -77,18 +87,9 @@ def generate_boq_from_electrical_points(project_id, unit_prices):
     return boq_items
 
 
-def calculate_boq_total(project_id):
-    boq_items = BOQItem.query.filter_by(project_id=project_id).all()
-
-    total = 0
-
-    for item in boq_items:
-        total += item.amount
-
-    return total
-
-
 def get_material_price(material_name):
+    """Retrieve a material's saved price and unit."""
+
     from app.models import MaterialPrice
 
     material_price = MaterialPrice.query.filter_by(
@@ -108,10 +109,10 @@ def get_material_price(material_name):
 
 
 def generate_boq_from_material_prices(project_id):
+    """Generate electrical-point BOQ items from saved prices."""
+
     clear_electrical_point_boq_items(project_id)
-
     electrical_points = get_project_electrical_points(project_id)
-
     boq_items = []
 
     for point in electrical_points:
@@ -131,6 +132,8 @@ def generate_boq_from_material_prices(project_id):
 
 
 def clear_electrical_point_boq_items(project_id):
+    """Delete generated electrical-point BOQ items for a project."""
+
     boq_items = BOQItem.query.filter_by(
         project_id=project_id,
         quantity_source="Electrical Point",
@@ -140,3 +143,76 @@ def clear_electrical_point_boq_items(project_id):
         db.session.delete(item)
 
     db.session.commit()
+
+
+def generate_boq_from_cable_requirements(
+    project_id,
+    cable_requirements,
+):
+    """
+    Generate cable BOQ items from estimated cable lengths.
+
+    Example:
+        {1: 635, 2: 500, 3: 250}
+
+    Keys are cable record IDs; values are required lengths in metres.
+    """
+
+    from app.services.cable_service import (
+        calculate_project_cable_cost,
+    )
+
+    # Validate and calculate before clearing existing cable items.
+    result = calculate_project_cable_cost(cable_requirements)
+
+    clear_cable_boq_items(project_id)
+    boq_items = []
+
+    for cable in result["cables"]:
+        specification = (
+            f'{cable["size"]}, '
+            f'{cable["colour"]}, '
+            f'{cable["coil_length"]} m per coil'
+        )
+
+        description = (
+            f'{cable["cable_type"]} - {cable["function"]}'
+        )
+
+        boq_item = create_boq_item(
+            project_id=project_id,
+            description=description,
+            specification=specification,
+            quantity=cable["number_of_coils"],
+            unit="coil",
+            unit_price=cable["price_per_coil"],
+            quantity_source="Cable Calculation",
+        )
+
+        boq_items.append(boq_item)
+
+    return boq_items
+
+
+def clear_cable_boq_items(project_id):
+    """Delete cable-calculation BOQ items for a project."""
+
+    cable_items = BOQItem.query.filter_by(
+        project_id=project_id,
+        quantity_source="Cable Calculation",
+    ).all()
+
+    for item in cable_items:
+        db.session.delete(item)
+
+    db.session.commit()
+
+
+def calculate_boq_total(project_id):
+    """Calculate the total amount of all BOQ items in a project."""
+
+    boq_items = BOQItem.query.filter_by(
+        project_id=project_id
+    ).all()
+
+    return sum(item.amount for item in boq_items)
