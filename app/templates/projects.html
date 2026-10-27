@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Projects | Sancta Tech</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0b1120;
+            color: #e5edf8;
+        }
+        header {
+            background: #111c32;
+            color: white;
+            padding: 22px;
+        }
+        header h1 { margin: 0 0 8px; }
+        header a { color: #cbdcf5; }
+        main {
+            max-width: 1100px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        .panel {
+            background: #172338;
+            padding: 24px;
+            margin-bottom: 24px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,.06);
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 7px;
+        }
+        input, select {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #40516b;
+            border-radius: 6px;
+        }
+        button {
+            margin-top: 18px;
+            padding: 12px 20px;
+            border: 0;
+            border-radius: 6px;
+            background: #2563eb;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .table-wrap { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #34445d;
+        }
+        th { background: #202e45; }
+        td a { color: #0b7285; font-weight: bold; }
+        .message {
+            padding: 12px;
+            background: #142d46;
+            border-radius: 6px;
+        }
+        .empty { color: #a8b7cc; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Sancta Tech — Projects</h1>
+        <a href="{{ url_for('home') }}">Back to Dashboard</a>
+    </header>
+    <main>
+        <section class="panel">
+            <h2>Create a New Project</h2>
+            <p>Enter the building and customer details below.</p>
+
+            {% with messages = get_flashed_messages() %}
+                {% for message in messages %}
+                    <p class="message">{{ message }}</p>
+                {% endfor %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('projects') }}">
+                <div class="form-grid">
+                    <div>
+                        <label for="project_name">Project Name</label>
+                        <input id="project_name" name="project_name"
+                               required maxlength="100">
+                    </div>
+                    <div>
+                        <label for="customer_name">Customer Name</label>
+                        <input id="customer_name" name="customer_name"
+                               required maxlength="100">
+                    </div>
+                    <div>
+                        <label for="location">Building Location</label>
+                        <input id="location" name="location"
+                               required maxlength="200">
+                    </div>
+                    <div>
+                        <label for="building_type">Building Type</label>
+                        <select id="building_type" name="building_type" required>
+                            <option value="">Select building type</option>
+                            <option value="Residential">Residential</option>
+                            <option value="Commercial">Commercial</option>
+                            <option value="Industrial">Industrial</option>
+                            <option value="Institutional">Institutional</option>
+                            <option value="Mixed Use">Mixed Use</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="number_of_floors">Number of Floors</label>
+                        <input id="number_of_floors" name="number_of_floors"
+                               type="number" min="1" max="200" value="1" required>
+                    </div>
+                </div>
+                <button type="submit">Save Project</button>
+            </form>
+        </section>
+
+        <section class="panel">
+            <h2>Saved Projects</h2>
+
+            {% if projects %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Project</th>
+                                <th>Customer</th>
+                                <th>Location</th>
+                                <th>Building Type</th>
+                                <th>Floors</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for project in projects %}
+                                <tr>
+                                    <td>{{ project.id }}</td>
+                                    <td>
+                                        <a href="{{ url_for('project_detail', project_id=project.id) }}">
+                                            {{ project.project_name }}
+                                        </a>
+                                    </td>
+                                    <td>{{ project.customer_name }}</td>
+                                    <td>{{ project.location }}</td>
+                                    <td>{{ project.building_type }}</td>
+                                    <td>{{ project.number_of_floors }}</td>
+                                    <td>{{ project.status }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="empty">
+                    No projects yet. Use the form above to add your first project.
+                </p>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

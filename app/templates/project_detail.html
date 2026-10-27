@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Project Details | Sancta Tech</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0b1120;
+            color: #e5edf8;
+        }
+        header {
+            background: #111c32;
+            color: white;
+            padding: 22px;
+        }
+        header h1 { margin: 0 0 8px; }
+        header a { color: #cbdcf5; }
+        main { max-width: 1100px; margin: 30px auto; padding: 0 20px; }
+        .panel {
+            background: #172338;
+            padding: 24px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,.06);
+        }
+        .details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+        .item { padding: 12px; background: #202e45; border-radius: 8px; }
+        .label { color: #a8b7cc; font-size: 13px; margin-bottom: 6px; }
+        .value { font-weight: bold; overflow-wrap: anywhere; }
+        .status {
+            display: inline-block;
+            padding: 6px 10px;
+            background: #143b37;
+            color: #6ee7b7;
+            border-radius: 20px;
+        }
+        .button {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 11px 16px;
+            border: 0;
+            border-radius: 6px;
+            background: #2563eb;
+            color: white;
+            text-decoration: none;
+            cursor: pointer;
+            font-size: 15px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: bold;
+        }
+        input, select {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #40516b;
+            border-radius: 6px;
+            font-size: 15px;
+        }
+        .message {
+            padding: 12px;
+            margin-bottom: 12px;
+            background: #142d46;
+            border-left: 4px solid #0b7285;
+            border-radius: 5px;
+        }
+        .table-wrap { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #34445d;
+        }
+        th { background: #202e45; }
+        .empty { color: #a8b7cc; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Sancta Tech — Project Details</h1>
+        <a href="{{ url_for('projects') }}">Back to Projects</a>
+    </header>
+
+    <main>
+        {% with messages = get_flashed_messages() %}
+            {% for message in messages %}
+                <div class="message">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <section class="panel">
+            <h2>{{ project.project_name }}</h2>
+            <p>Project reference: ST-{{ "%04d" | format(project.id) }}</p>
+
+            <div class="details">
+                <div class="item">
+                    <div class="label">Customer</div>
+                    <div class="value">{{ project.customer_name }}</div>
+                </div>
+                <div class="item">
+                    <div class="label">Building Location</div>
+                    <div class="value">{{ project.location }}</div>
+                </div>
+                <div class="item">
+                    <div class="label">Building Type</div>
+                    <div class="value">{{ project.building_type }}</div>
+                </div>
+                <div class="item">
+                    <div class="label">Number of Floors</div>
+                    <div class="value">{{ project.number_of_floors }}</div>
+                </div>
+                <div class="item">
+                    <div class="label">Project Status</div>
+                    <div><span class="status">{{ project.status }}</span></div>
+                </div>
+                <div class="item">
+                    <div class="label">Date Created</div>
+                    <div class="value">
+                        {{ project.created_at.strftime("%d %b %Y") if project.created_at else "Not available" }}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Building Design — Add a Room</h2>
+            <p>Add each room in the building. Dimensions are optional for now.</p>
+
+            <form method="POST" action="{{ url_for('add_room', project_id=project.id) }}">
+                <div class="form-grid">
+                    <div>
+                        <label for="name">Room Name *</label>
+                        <input id="name" name="name" type="text"
+                               placeholder="e.g. Master Bedroom" required>
+                    </div>
+                    <div>
+                        <label for="room_type">Room Type *</label>
+                        <select id="room_type" name="room_type" required>
+                            <option value="">Select room type</option>
+                            <option value="Bedroom">Bedroom</option>
+                            <option value="Living Room">Living Room</option>
+                            <option value="Kitchen">Kitchen</option>
+                            <option value="Bathroom">Bathroom</option>
+                            <option value="Toilet">Toilet</option>
+                            <option value="Dining Room">Dining Room</option>
+                            <option value="Corridor">Corridor</option>
+                            <option value="Store">Store</option>
+                            <option value="Office">Office</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="length">Length (metres)</label>
+                        <input id="length" name="length" type="number"
+                               min="0.01" step="0.01" placeholder="e.g. 4.5">
+                    </div>
+                    <div>
+                        <label for="width">Width (metres)</label>
+                        <input id="width" name="width" type="number"
+                               min="0.01" step="0.01" placeholder="e.g. 3.5">
+                    </div>
+                    <div>
+                        <label for="height">Height (metres)</label>
+                        <input id="height" name="height" type="number"
+                               min="0.01" step="0.01" placeholder="e.g. 3.0">
+                    </div>
+                </div>
+                <button class="button" type="submit">Save Room</button>
+            </form>
+        </section>
+
+        <section class="panel">
+            <h2>Rooms in This Project</h2>
+            {% if rooms %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Room Name</th>
+                                <th>Room Type</th>
+                                <th>Length (m)</th>
+                                <th>Width (m)</th>
+                                <th>Height (m)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for room in rooms %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ room.name }}</td>
+                                    <td>{{ room.room_type }}</td>
+                                    <td>{{ room.length if room.length is not none else "—" }}</td>
+                                    <td>{{ room.width if room.width is not none else "—" }}</td>
+                                    <td>{{ room.height if room.height is not none else "—" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="empty">No rooms have been added to this project yet.</p>
+            {% endif %}
+        </section>
+
+        <a class="button" href="{{ url_for('projects') }}">Return to Projects</a>
+    </main>
+</body>
+</html>
