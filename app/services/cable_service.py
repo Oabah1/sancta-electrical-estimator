@@ -141,3 +141,53 @@ def estimate_circuit_from_database(circuit_id, conductor_count, allowance_percen
     })
 
     return result
+
+
+def estimate_circuit_cable_cost(
+    circuit_id,
+    cable_id,
+    conductor_count,
+    allowance_percent=10,
+):
+    """
+    Estimate cable quantity and cost for a saved circuit.
+
+    This estimates conductor length and coil cost only.
+    It does not determine whether the cable size is electrically suitable.
+    """
+    from app.models import Circuit
+
+    circuit = db.session.get(Circuit, circuit_id)
+
+    if circuit is None:
+        raise ValueError(f"Circuit record {circuit_id} was not found.")
+
+    if circuit.route_length is None:
+        raise ValueError(
+            f"Circuit '{circuit.circuit_name}' has no route length."
+        )
+
+    cable = db.session.get(Cable, cable_id)
+
+    if cable is None:
+        raise ValueError(f"Cable record {cable_id} was not found.")
+
+    length_estimate = estimate_circuit_conductor_length(
+        route_length=circuit.route_length,
+        conductor_count=conductor_count,
+        allowance_percent=allowance_percent,
+    )
+
+    cable_cost = calculate_cable_cost(
+        cable,
+        length_estimate["estimated_length"],
+    )
+
+    return {
+        "project_id": circuit.project_id,
+        "circuit_id": circuit.id,
+        "circuit_name": circuit.circuit_name,
+        "circuit_type": circuit.circuit_type,
+        "length_estimate": length_estimate,
+        "cable_cost": cable_cost,
+    }
