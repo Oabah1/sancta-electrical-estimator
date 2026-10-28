@@ -188,6 +188,95 @@
         </section>
 
         <section class="panel">
+            <h2>Electrical Points</h2>
+            <p>Add lighting points, socket outlets, fans, air conditioners, and other electrical loads to a room.</p>
+
+            {% if rooms %}
+                <form method="POST" action="{{ url_for('add_electrical_point', project_id=project.id) }}">
+                    <div class="form-grid">
+                        <div>
+                            <label for="room_id">Room *</label>
+                            <select id="room_id" name="room_id" required>
+                                <option value="">Select room</option>
+                                {% for room in rooms %}
+                                    <option value="{{ room.id }}">{{ room.name }} ({{ room.room_type }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="point_type">Point Type *</label>
+                            <select id="point_type" name="point_type" required>
+                                <option value="">Select point type</option>
+                                <option value="Lighting Point">Lighting Point</option>
+                                <option value="Socket Outlet">Socket Outlet</option>
+                                <option value="Fan Point">Fan Point</option>
+                                <option value="Air Conditioner">Air Conditioner</option>
+                                <option value="Water Heater">Water Heater</option>
+                                <option value="Cooker Point">Cooker Point</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="quantity">Quantity *</label>
+                            <input id="quantity" name="quantity" type="number" min="1" step="1" value="1" required>
+                        </div>
+                        <div>
+                            <label for="load_watts">Load per Point (watts)</label>
+                            <input id="load_watts" name="load_watts" type="number" min="0" step="0.1" placeholder="e.g. 12">
+                        </div>
+                        <div>
+                            <label for="description">Description</label>
+                            <input id="description" name="description" type="text" maxlength="200" placeholder="e.g. LED ceiling light">
+                        </div>
+                    </div>
+                    <button class="button" type="submit">Save Electrical Point</button>
+                </form>
+            {% else %}
+                <p class="empty">Add a room to this project before adding electrical points.</p>
+            {% endif %}
+        </section>
+
+        <section class="panel">
+            <h2>Electrical Points in This Project</h2>
+            {% if electrical_points %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Room</th>
+                                <th>Point Type</th>
+                                <th>Quantity</th>
+                                <th>Load per Point (W)</th>
+                                <th>Total Load (W)</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for point in electrical_points %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>
+                                        {% for room in rooms %}
+                                            {% if room.id == point.room_id %}{{ room.name }}{% endif %}
+                                        {% endfor %}
+                                    </td>
+                                    <td>{{ point.point_type }}</td>
+                                    <td>{{ point.quantity }}</td>
+                                    <td>{{ point.load_watts if point.load_watts is not none else "—" }}</td>
+                                    <td>{{ "%.1f"|format(point.quantity * point.load_watts) if point.load_watts is not none else "—" }}</td>
+                                    <td>{{ point.description or "—" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="empty">No electrical points have been added to this project yet.</p>
+            {% endif %}
+        </section>
+
+        <section class="panel">
             <h2>Rooms in This Project</h2>
             {% if rooms %}
                 <div class="table-wrap">

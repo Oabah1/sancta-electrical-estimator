@@ -26,7 +26,7 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
 
-    from app.models import Project, Room, Circuit, Cable, BOQItem, MaterialPrice
+    from app.models import Project, Room, ElectricalPoint, Circuit, Cable, BOQItem, MaterialPrice
 
     @app.route("/")
     def home():
@@ -326,10 +326,15 @@ def create_app():
             project_id=project.id
         ).order_by(Room.id.asc()).all()
 
+        electrical_points = ElectricalPoint.query.filter_by(
+            project_id=project.id
+        ).order_by(ElectricalPoint.id.asc()).all()
+
         return render_template(
             "project_detail.html",
             project=project,
             rooms=rooms,
+            electrical_points=electrical_points,
         )
 
     @app.route(
@@ -393,14 +398,132 @@ def create_app():
         )
 
 
-    @app.route("/circuits")
+    @app.route(
+        "/projects/<int:project_id>/electrical-points",
+        methods=["POST"],
+    )
+    def add_electrical_point(project_id):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        room_id_text = request.form.get("room_id", "").strip()
+        point_type = request.form.get("point_type", "").strip()
+        quantity_text = request.form.get("quantity", "1").strip()
+        description = request.form.get("description", "").strip()
+        load_text = request.form.get("load_watts", "").strip()
+
+        try:
+            room_id = int(room_id_text)
+            room = db.session.get(Room, room_id)
+            if room is None or room.project_id != project.id:
+                raise ValueError
+
+            quantity = int(quantity_text)
+            if quantity < 1:
+                raise ValueError
+
+            load_watts = None
+            if load_text:
+                load_watts = float(load_text)
+                if load_watts < 0:
+                    raise ValueError
+
+            if not point_type:
+                raise ValueError
+
+        except (ValueError, TypeError):
+            flash("Check the room, point type, quantity, and load values.")
+            return redirect(
+                url_for("project_detail", project_id=project.id)
+            )
+
+        point = ElectricalPoint(
+            project_id=project.id,
+            room_id=room.id,
+            point_type=point_type,
+            quantity=quantity,
+            description=description or None,
+            load_watts=load_watts,
+        )
+
+        try:
+            db.session.add(point)
+            db.session.commit()
+            flash("Electrical point added successfully.")
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unable to save electrical point")
+            flash("The electrical point could not be saved.")
+
+        return redirect(
+            url_for("project_detail", project_id=project.id)
+        )
+
+
+    @app.route("/circuits", methods=["GET", "POST"])
     def circuits():
+        projects_list = Project.query.order_by(Project.project_name.asc()).all()
+
+        if request.method == "POST":
+            try:
+                project_id = int(request.form.get("project_id", ""))
+                project = db.session.get(Project, project_id)
+                circuit_name = request.form.get("circuit_name", "").strip()
+                circuit_type = request.form.get("circuit_type", "").strip()
+                cable_size = request.form.get("cable_size", "").strip()
+                protection_rating = request.form.get("protection_rating", "").strip()
+
+                connected_load = float(request.form.get("connected_load", "0"))
+                route_text = request.form.get("route_length", "").strip()
+                route_length = float(route_text) if route_text else None
+                design_load_text = request.form.get("design_load", "").strip()
+                design_load = float(design_load_text) if design_load_text else connected_load
+
+                if project is None:
+                    raise ValueError("Select a valid project.")
+                if not circuit_name or not circuit_type:
+                    raise ValueError("Circuit name and circuit type are required.")
+                if connected_load < 0 or design_load < 0:
+                    raise ValueError("Loads cannot be negative.")
+                if route_length is not None and route_length < 0:
+                    raise ValueError("Route length cannot be negative.")
+
+                # Preliminary single-phase estimate at 230 V and power factor 1.0.
+                # This is not a substitute for verified electrical design.
+                design_current = design_load / 230.0
+
+                circuit = Circuit(
+                    project_id=project.id,
+                    circuit_name=circuit_name,
+                    circuit_type=circuit_type,
+                    connected_load=connected_load,
+                    design_load=design_load,
+                    design_current=design_current,
+                    cable_size=cable_size or None,
+                    protection_rating=protection_rating or None,
+                    route_length=route_length,
+                )
+                db.session.add(circuit)
+                db.session.commit()
+                flash("Circuit created successfully.")
+                return redirect(url_for("circuits"))
+
+            except (ValueError, TypeError) as exc:
+                db.session.rollback()
+                flash(str(exc) or "Please check the circuit details.")
+            except Exception:
+                db.session.rollback()
+                app.logger.exception("Unable to save circuit")
+                flash("The circuit could not be saved. Check the application log.")
+
         circuits_list = (
             db.session.query(Circuit, Project)
             .join(Project, Circuit.project_id == Project.id)
             .order_by(Circuit.id.desc())
             .all()
         )
+
         return render_template_string("""
         <!DOCTYPE html>
         <html lang="en">
@@ -410,49 +533,100 @@ def create_app():
             <title>Circuits | Sancta Tech</title>
             <style>
                 * { box-sizing: border-box; }
-                body {
-                    margin: 0; padding: 28px;
-                    font-family: Arial, sans-serif;
-                    background: #0b1120; color: #e5e7eb;
-                }
+                body { margin: 0; padding: 28px; font-family: Arial, sans-serif; background: #0b1120; color: #e5e7eb; }
                 main { max-width: 1200px; margin: auto; }
                 h1 { margin-bottom: 8px; }
-                p { color: #a8b3c7; }
+                p, .hint { color: #a8b3c7; }
                 a { color: #60a5fa; }
-                .panel {
-                    margin-top: 24px; padding: 20px;
-                    background: #151f32; border: 1px solid #29364d;
-                    border-radius: 12px; overflow-x: auto;
-                }
+                .panel { margin-top: 24px; padding: 20px; background: #151f32; border: 1px solid #29364d; border-radius: 12px; overflow-x: auto; }
+                .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+                label { display: block; margin-bottom: 7px; font-weight: bold; }
+                input, select { width: 100%; padding: 11px; border: 1px solid #40516b; border-radius: 6px; background: #0b1120; color: #e5e7eb; }
+                button { margin-top: 16px; padding: 11px 16px; border: 0; border-radius: 6px; background: #2563eb; color: white; cursor: pointer; }
                 table { width: 100%; border-collapse: collapse; }
-                th, td {
-                    padding: 13px; text-align: left;
-                    border-bottom: 1px solid #29364d;
-                    white-space: nowrap;
-                }
+                th, td { padding: 13px; text-align: left; border-bottom: 1px solid #29364d; white-space: nowrap; }
                 th { color: #93c5fd; }
                 .empty { padding: 22px 0; }
-                .back { display: inline-block; margin-top: 18px; }
+                .message { padding: 12px; margin: 12px 0; background: #142d46; border-left: 4px solid #0b7285; }
             </style>
         </head>
         <body>
             <main>
                 <a href="{{ url_for('home') }}">← Back to Dashboard</a>
                 <h1>Circuit Management</h1>
-                <p>View the circuits registered against your electrical projects.</p>
+                <p>Create circuits for a project and review saved circuit details.</p>
+
+                {% with messages = get_flashed_messages() %}
+                    {% for message in messages %}
+                        <div class="message">{{ message }}</div>
+                    {% endfor %}
+                {% endwith %}
+
                 <section class="panel">
+                    <h2>Create Circuit</h2>
+                    {% if projects_list %}
+                    <form method="POST" action="{{ url_for('circuits') }}">
+                        <div class="form-grid">
+                            <div>
+                                <label for="project_id">Project *</label>
+                                <select id="project_id" name="project_id" required>
+                                    <option value="">Select project</option>
+                                    {% for project in projects_list %}
+                                    <option value="{{ project.id }}">{{ project.project_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="circuit_name">Circuit Name *</label>
+                                <input id="circuit_name" name="circuit_name" required placeholder="e.g. Ground Floor Lighting">
+                            </div>
+                            <div>
+                                <label for="circuit_type">Circuit Type *</label>
+                                <select id="circuit_type" name="circuit_type" required>
+                                    <option value="">Select type</option>
+                                    <option>Lighting</option>
+                                    <option>Socket Outlet</option>
+                                    <option>Air Conditioning</option>
+                                    <option>Water Heater</option>
+                                    <option>Cooker</option>
+                                    <option>Other</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="connected_load">Connected Load (W)</label>
+                                <input id="connected_load" name="connected_load" type="number" min="0" step="0.1" value="0">
+                            </div>
+                            <div>
+                                <label for="design_load">Design Load (W)</label>
+                                <input id="design_load" name="design_load" type="number" min="0" step="0.1" placeholder="Defaults to connected load">
+                            </div>
+                            <div>
+                                <label for="route_length">Route Length (m)</label>
+                                <input id="route_length" name="route_length" type="number" min="0" step="0.1" placeholder="Optional">
+                            </div>
+                            <div>
+                                <label for="cable_size">Cable Size</label>
+                                <input id="cable_size" name="cable_size" placeholder="e.g. 2.5 mm²">
+                            </div>
+                            <div>
+                                <label for="protection_rating">Protection Rating</label>
+                                <input id="protection_rating" name="protection_rating" placeholder="e.g. 20 A">
+                            </div>
+                        </div>
+                        <p class="hint">Preliminary current estimate = design load ÷ 230 V, assuming single-phase supply and power factor 1.0. Confirm cable capacity, installation method, voltage drop, fault protection and protective-device coordination before using this for an installation.</p>
+                        <button type="submit">Save Circuit</button>
+                    </form>
+                    {% else %}
+                    <p>No projects exist yet. <a href="{{ url_for('projects') }}">Create a project first.</a></p>
+                    {% endif %}
+                </section>
+
+                <section class="panel">
+                    <h2>Saved Circuits</h2>
                     {% if circuits_list %}
                     <table>
                         <thead>
-                            <tr>
-                                <th>Project</th>
-                                <th>Circuit</th>
-                                <th>Type</th>
-                                <th>Connected Load (W)</th>
-                                <th>Design Current (A)</th>
-                                <th>Cable Size</th>
-                                <th>Protection</th>
-                            </tr>
+                            <tr><th>Project</th><th>Circuit</th><th>Type</th><th>Connected Load (W)</th><th>Design Current (A)</th><th>Cable Size</th><th>Protection</th><th>Route (m)</th></tr>
                         </thead>
                         <tbody>
                             {% for circuit, project in circuits_list %}
@@ -464,22 +638,19 @@ def create_app():
                                 <td>{{ "%.2f"|format(circuit.design_current or 0) }}</td>
                                 <td>{{ circuit.cable_size or "Not specified" }}</td>
                                 <td>{{ circuit.protection_rating or "Not specified" }}</td>
+                                <td>{{ circuit.route_length if circuit.route_length is not none else "—" }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                     {% else %}
-                    <div class="empty">
-                        <h3>No circuits found yet</h3>
-                        <p>Once circuits have been added to your projects, they will appear here.</p>
-                        <a href="{{ url_for('projects') }}">Open Project Management</a>
-                    </div>
+                    <div class="empty"><h3>No circuits found yet</h3><p>Use the form above to create your first circuit.</p></div>
                     {% endif %}
                 </section>
             </main>
         </body>
         </html>
-        """, circuits_list=circuits_list)
+        """, circuits_list=circuits_list, projects_list=projects_list)
 
 
     @app.route("/materials", methods=["GET", "POST"])
