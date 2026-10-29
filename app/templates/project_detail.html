@@ -310,6 +310,451 @@
             {% endif %}
         </section>
 
+        <section class="panel">
+            <h2>Whole-Building Cable Estimate</h2>
+            <p>
+                Estimate cable requirements for the entire building. Required metres
+                are converted into complete coils, with spare metres and cost calculated
+                automatically.
+            </p>
+
+            <h3>Enter Cable Manually</h3>
+            <form method="POST"
+                  action="{{ url_for('add_project_cable_estimate', project_id=project.id) }}">
+                <input type="hidden" name="entry_mode" value="manual">
+                <div class="form-grid">
+                    <div>
+                        <label for="manual_cable_type">Cable Type *</label>
+                        <input id="manual_cable_type" name="manual_cable_type"
+                               placeholder="e.g. Single Core PVC Copper" required>
+                    </div>
+                    <div>
+                        <label for="manual_brand">Company / Brand</label>
+                        <input id="manual_brand" name="manual_brand"
+                               placeholder="e.g. Comester, Coman, Lagos Star">
+                    </div>
+                    <div>
+                        <label for="manual_size">Cable Size *</label>
+                        <input id="manual_size" name="manual_size"
+                               placeholder="e.g. 2.5 mm²" required>
+                    </div>
+                    <div>
+                        <label for="manual_colour">Cable Colour *</label>
+                        <input id="manual_colour" name="manual_colour"
+                               placeholder="e.g. Red, Black, Green/Yellow" required>
+                    </div>
+                    <div>
+                        <label for="manual_function">Function</label>
+                        <input id="manual_function" name="manual_function"
+                               placeholder="e.g. Live, Neutral, Earth">
+                    </div>
+                    <div>
+                        <label for="manual_conductor_material">Conductor material</label>
+                        <input id="manual_conductor_material" name="manual_conductor_material"
+                               placeholder="e.g. Copper, Aluminium">
+                    </div>
+                    <div>
+                        <label for="manual_insulation">Insulation</label>
+                        <input id="manual_insulation" name="manual_insulation"
+                               placeholder="e.g. PVC, XLPE">
+                    </div>
+                    <div>
+                        <label for="manual_coil_length">Metres per Coil *</label>
+                        <input id="manual_coil_length" name="manual_coil_length"
+                               type="number" min="0.01" step="0.01"
+                               value="100" required>
+                    </div>
+                    <div>
+                        <label for="manual_unit_price">Price per Coil (₦) *</label>
+                        <input id="manual_unit_price" name="manual_unit_price"
+                               type="number" min="0" step="0.01"
+                               value="0" required>
+                    </div>
+                    <div>
+                        <label for="manual_required_metres">Required Metres *</label>
+                        <input id="manual_required_metres" name="required_metres"
+                               type="number" min="0.01" step="0.01"
+                               placeholder="e.g. 245" required>
+                    </div>
+                </div>
+                <button class="button" type="submit">Add Manual Cable</button>
+            </form>
+
+            {% if available_cables %}
+                <form method="POST"
+                      action="{{ url_for('add_project_cable_estimate', project_id=project.id) }}">
+                    <div class="form-grid">
+                        <div>
+                            <label for="cable_type_select">Cable Type *</label>
+                            <select id="cable_type_select" required>
+                                <option value="">Select cable type</option>
+                                {% for value in available_cables | map(attribute='cable_type') | unique | sort %}
+                                    <option value="{{ value }}">{{ value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="cable_size_select">Cable Size *</label>
+                            <select id="cable_size_select" required disabled>
+                                <option value="">Select size</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="cable_colour_select">Cable Colour *</label>
+                            <select id="cable_colour_select" required disabled>
+                                <option value="">Select colour</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="cable_id">Selected Cable Details *</label>
+                            <select id="cable_id" name="cable_id" required disabled>
+                                <option value="">Select colour first</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="required_metres">Required Metres *</label>
+                            <input id="required_metres" name="required_metres"
+                                   type="number" min="0.01" step="0.01"
+                                   placeholder="e.g. 245" required>
+                        </div>
+                    </div>
+                    <button class="button" type="submit">Add Cable Estimate</button>
+                </form>
+
+                <script>
+                (function () {
+                    const cables = [
+                        {% for cable in available_cables %}
+                        {
+                            id: {{ cable.id | tojson }},
+                            type: {{ cable.cable_type | tojson }},
+                            brand: {{ (cable.brand or "") | tojson }},
+                            conductor: {{ (cable.conductor_material or "") | tojson }},
+                            insulation: {{ (cable.insulation or "") | tojson }},
+                            size: {{ cable.size | tojson }},
+                            colour: {{ cable.colour | tojson }},
+                            func: {{ cable.function | tojson }},
+                            length: {{ cable.coil_length | tojson }},
+                            price: {{ (cable.unit_price or 0) | tojson }}
+                        }{% if not loop.last %},{% endif %}
+                        {% endfor %}
+                    ];
+
+                    const typeSelect = document.getElementById("cable_type_select");
+                    const sizeSelect = document.getElementById("cable_size_select");
+                    const colourSelect = document.getElementById("cable_colour_select");
+                    const cableSelect = document.getElementById("cable_id");
+
+                    function fillSelect(select, placeholder, values) {
+                        select.replaceChildren(new Option(placeholder, ""));
+                        values.forEach(value => select.add(new Option(value, value)));
+                        select.disabled = values.length === 0;
+                    }
+
+                    function updateSizes() {
+                        const type = typeSelect.value;
+                        const sizes = [...new Set(
+                            cables.filter(c => c.type === type).map(c => c.size)
+                        )].sort((a, b) => a.localeCompare(b, undefined, {numeric: true}));
+
+                        fillSelect(sizeSelect, "Select size", sizes);
+                        fillSelect(colourSelect, "Select colour", []);
+                        fillSelect(cableSelect, "Select colour first", []);
+                    }
+
+                    function updateColours() {
+                        const type = typeSelect.value;
+                        const size = sizeSelect.value;
+                        const colours = [...new Set(
+                            cables.filter(c => c.type === type && c.size === size)
+                                  .map(c => c.colour)
+                        )].sort();
+
+                        fillSelect(colourSelect, "Select colour", colours);
+                        fillSelect(cableSelect, "Select colour first", []);
+                    }
+
+                    function updateCable() {
+                        const matches = cables.filter(c =>
+                            c.type === typeSelect.value &&
+                            c.size === sizeSelect.value &&
+                            c.colour === colourSelect.value
+                        );
+
+                        cableSelect.replaceChildren(new Option("Select cable details", ""));
+                        matches.forEach(c => {
+                            const specs = [c.brand, c.conductor, c.insulation, c.func]
+                                .filter(value => value);
+                            const label = specs.join(" / ") + " — " + c.length +
+                                " m/coil — ₦" + Number(c.price).toLocaleString(
+                                    "en-NG", {minimumFractionDigits: 2}
+                                );
+                            cableSelect.add(new Option(label, c.id));
+                        });
+                        cableSelect.disabled = matches.length === 0;
+
+                        // If only one registered cable matches the selected
+                        // type, size and colour, select it automatically.
+                        if (matches.length === 1) {
+                            cableSelect.value = String(matches[0].id);
+                        }
+                    }
+
+                    typeSelect.addEventListener("change", updateSizes);
+                    sizeSelect.addEventListener("change", updateColours);
+                    colourSelect.addEventListener("change", updateCable);
+                })();
+                </script>
+            {% else %}
+                <p class="empty">
+                    No cables are available in the catalogue yet.
+                    Add cable types, coil lengths and prices under Materials first.
+                </p>
+            {% endif %}
+
+            {% if cable_estimate_rows %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Cable</th>
+                                <th>Required (m)</th>
+                                <th>Coil Length (m)</th>
+                                <th>Price/Coil (₦)</th>
+                                <th>Coils</th>
+                                <th>Supplied (m)</th>
+                                <th>Spare (m)</th>
+                                <th>Amount (₦)</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in cable_estimate_rows %}
+                                {% set item = row.estimate %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>
+                                        {{ item.cable_type or (item.cable.cable_type if item.cable else 'Cable') }}<br>
+                                        Brand: {{ item.brand or (item.cable.brand if item.cable else 'Not specified') }}<br>
+                                        Conductor: {{ item.conductor_material or (item.cable.conductor_material if item.cable else 'Not specified') or 'Not specified' }}<br>
+                                        Insulation: {{ item.insulation or (item.cable.insulation if item.cable else 'Not specified') or 'Not specified' }}<br>
+                                        {{ item.size or (item.cable.size if item.cable else '') }} /
+                                        {{ item.colour or (item.cable.colour if item.cable else '') }}<br>
+                                        {{ item.function or (item.cable.function if item.cable else '') }}
+                                    </td>
+                                    <td>{{ "%.2f"|format(item.required_metres) }}</td>
+                                    <td>{{ "%.2f"|format(item.coil_length) }}</td>
+                                    <td>{{ "%.2f"|format(item.unit_price) }}</td>
+                                    <td>{{ row.number_of_coils }}</td>
+                                    <td>{{ "%.2f"|format(row.supplied_metres) }}</td>
+                                    <td>{{ "%.2f"|format(row.spare_metres) }}</td>
+                                    <td>{{ "%.2f"|format(row.amount) }}</td>
+                                    <td>
+                                        <details>
+                                            <summary>Edit</summary>
+                                            <form method="POST"
+                                                  action="{{ url_for('edit_project_cable_estimate', project_id=project.id, estimate_id=item.id) }}">
+                                                <input type="hidden" name="entry_mode" value="manual">
+
+                                                <label for="edit-type-{{ item.id }}">Cable type</label>
+                                                <input id="edit-type-{{ item.id }}" name="manual_cable_type"
+                                                       value="{{ item.cable_type or (item.cable.cable_type if item.cable else '') }}" required>
+
+                                                <label for="edit-brand-{{ item.id }}">Brand / company</label>
+                                                <input id="edit-brand-{{ item.id }}" name="manual_brand"
+                                                       value="{{ item.brand or (item.cable.brand if item.cable else '') }}">
+
+                                                <label for="edit-size-{{ item.id }}">Cable size (mm²)</label>
+                                                <input id="edit-size-{{ item.id }}" name="manual_size"
+                                                       value="{{ item.size or (item.cable.size if item.cable else '') }}" required>
+
+                                                <label for="edit-colour-{{ item.id }}">Colour</label>
+                                                <input id="edit-colour-{{ item.id }}" name="manual_colour"
+                                                       value="{{ item.colour or (item.cable.colour if item.cable else '') }}" required>
+
+                                                <label for="edit-function-{{ item.id }}">Function</label>
+                                                <input id="edit-function-{{ item.id }}" name="manual_function"
+                                                       value="{{ item.function or (item.cable.function if item.cable else '') }}">
+
+                                                <label for="edit-conductor-{{ item.id }}">Conductor material</label>
+                                                <input id="edit-conductor-{{ item.id }}" name="manual_conductor_material"
+                                                       value="{{ item.conductor_material or (item.cable.conductor_material if item.cable else '') }}">
+
+                                                <label for="edit-insulation-{{ item.id }}">Insulation</label>
+                                                <input id="edit-insulation-{{ item.id }}" name="manual_insulation"
+                                                       value="{{ item.insulation or (item.cable.insulation if item.cable else '') }}">
+
+                                                <label for="edit-coil-{{ item.id }}">Coil length (metres)</label>
+                                                <input id="edit-coil-{{ item.id }}" name="manual_coil_length"
+                                                       type="number" min="0.01" step="0.01"
+                                                       value="{{ item.coil_length }}" required>
+
+                                                <label for="edit-price-{{ item.id }}">Price per coil (₦)</label>
+                                                <input id="edit-price-{{ item.id }}" name="manual_unit_price"
+                                                       type="number" min="0" step="0.01"
+                                                       value="{{ item.unit_price }}" required>
+
+                                                <label for="edit-metres-{{ item.id }}">Required metres</label>
+                                                <input id="edit-metres-{{ item.id }}" name="required_metres"
+                                                       type="number" min="0.01" step="0.01"
+                                                       value="{{ item.required_metres }}" required>
+                                                <button class="button" type="submit">Save</button>
+                                            </form>
+                                        </details>
+                                        <form method="POST"
+                                              action="{{ url_for('delete_project_cable_estimate', project_id=project.id, estimate_id=item.id) }}"
+                                              onsubmit="return confirm('Delete this cable estimate?');">
+                                            <button class="button" type="submit">Delete</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="8">Total Cable Estimate</th>
+                                <th colspan="2">₦{{ "%.2f"|format(cable_total) }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            {% else %}
+                <p class="empty">No cable estimates have been added to this project yet.</p>
+            {% endif %}
+        </section>
+
+        <section class="panel">
+            <h2>Whole-Building Piping Materials Estimate</h2>
+            <p>Add conduit pipes and accessories required for this building. Quantities are for the whole project, not individual rooms.</p>
+
+            <form method="POST" action="{{ url_for('add_piping_material', project_id=project.id) }}">
+                <div class="form-grid">
+                    <div>
+                        <label for="material_name">Material Name *</label>
+                        <input id="material_name" name="material_name" maxlength="150"
+                               placeholder="e.g. PVC conduit pipe" required>
+                    </div>
+                    <div>
+                        <label for="category">Category</label>
+                        <select id="category" name="category">
+                            <option value="Piping">Piping</option>
+                            <option value="Conduit Accessories">Conduit Accessories</option>
+                            <option value="Boxes">Boxes</option>
+                            <option value="Trunking">Trunking</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="unit">Unit *</label>
+                        <input id="unit" name="unit" maxlength="50"
+                               placeholder="e.g. length, piece, pack" required>
+                    </div>
+                    <div>
+                        <label for="quantity">Quantity *</label>
+                        <input id="quantity" name="quantity" type="number"
+                               min="0.01" step="0.01" required>
+                    </div>
+                    <div>
+                        <label for="unit_price">Unit Price (₦) *</label>
+                        <input id="unit_price" name="unit_price" type="number"
+                               min="0" step="0.01" value="0" required>
+                    </div>
+                    <div>
+                        <label for="notes">Notes (optional)</label>
+                        <input id="notes" name="notes" maxlength="250"
+                               placeholder="e.g. 20 mm heavy gauge">
+                    </div>
+                </div>
+                <button class="button" type="submit">Add Piping Material</button>
+            </form>
+
+            {% if piping_materials %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Material</th>
+                                <th>Category</th>
+                                <th>Unit</th>
+                                <th>Quantity</th>
+                                <th>Unit Price (₦)</th>
+                                <th>Amount (₦)</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in piping_materials %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td colspan="7">
+                                        <form id="edit-piping-{{ item.id }}"
+                                              method="POST"
+                                              action="{{ url_for('edit_piping_material', project_id=project.id, item_id=item.id) }}">
+                                            <div class="form-grid">
+                                                <div>
+                                                    <label for="material-{{ item.id }}">Material</label>
+                                                    <input id="material-{{ item.id }}" name="material_name"
+                                                           value="{{ item.material_name }}" maxlength="150" required>
+                                                </div>
+                                                <div>
+                                                    <label for="category-{{ item.id }}">Category</label>
+                                                    <input id="category-{{ item.id }}" name="category"
+                                                           value="{{ item.category }}" maxlength="80" required>
+                                                </div>
+                                                <div>
+                                                    <label for="unit-{{ item.id }}">Unit</label>
+                                                    <input id="unit-{{ item.id }}" name="unit"
+                                                           value="{{ item.unit }}" maxlength="50" required>
+                                                </div>
+                                                <div>
+                                                    <label for="quantity-{{ item.id }}">Quantity</label>
+                                                    <input id="quantity-{{ item.id }}" name="quantity" type="number"
+                                                           min="0.01" step="0.01"
+                                                           value="{{ item.quantity }}" required>
+                                                </div>
+                                                <div>
+                                                    <label for="price-{{ item.id }}">Unit Price (₦)</label>
+                                                    <input id="price-{{ item.id }}" name="unit_price" type="number"
+                                                           min="0" step="0.01"
+                                                           value="{{ item.unit_price }}" required>
+                                                </div>
+                                                <div>
+                                                    <label for="notes-{{ item.id }}">Notes</label>
+                                                    <input id="notes-{{ item.id }}" name="notes"
+                                                           value="{{ item.notes or '' }}" maxlength="250">
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </td>
+                                    <td>
+                                        <button class="button" type="submit"
+                                                form="edit-piping-{{ item.id }}">Save</button>
+                                        <form method="POST"
+                                              action="{{ url_for('delete_piping_material', project_id=project.id, item_id=item.id) }}"
+                                              onsubmit="return confirm('Delete this piping material? This cannot be undone.');">
+                                            <button class="button" type="submit">Delete</button>
+                                        </form>
+                                        <p>Current amount: ₦{{ "%.2f"|format(item.amount) }}</p>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="6">Total Piping Materials Cost</th>
+                                <th colspan="3">₦{{ "%.2f"|format(piping_total) }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            {% else %}
+                <p class="empty">No piping materials have been added to this project yet.</p>
+            {% endif %}
+        </section>
+
         <a class="button" href="{{ url_for('projects') }}">Return to Projects</a>
     </main>
 </body>

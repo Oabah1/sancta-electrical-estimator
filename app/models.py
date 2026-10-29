@@ -47,6 +47,9 @@ class Fitting(db.Model):
 class Cable(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cable_type = db.Column(db.String(100), nullable=False)
+    brand = db.Column(db.String(100), nullable=True)
+    conductor_material = db.Column(db.String(100), nullable=True)
+    insulation = db.Column(db.String(100), nullable=True)
     size = db.Column(db.String(50), nullable=False)
     colour = db.Column(db.String(50), nullable=False)
     function = db.Column(db.String(50), nullable=False)
@@ -73,7 +76,6 @@ class ProtectionDevice(db.Model):
     device_type = db.Column(db.String(100), nullable=False)
     rating = db.Column(db.String(50), nullable=False)
     poles = db.Column(db.Integer, nullable=True)
-    brand = db.Column(db.String(100), nullable=True)
     price = db.Column(db.Float, nullable=True)
     stock_quantity = db.Column(db.Integer, nullable=True, default=0)
 
@@ -116,3 +118,64 @@ class BOQItem(db.Model):
     amount = db.Column(db.Float, nullable=False, default=0)
     quantity_source = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class ProjectMaterial(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("project.id"),
+        nullable=False,
+        index=True,
+    )
+    material_name = db.Column(db.String(150), nullable=False)
+    unit = db.Column(db.String(50), nullable=False)
+    quantity = db.Column(db.Float, nullable=False, default=0)
+    unit_price = db.Column(db.Float, nullable=False, default=0)
+    amount = db.Column(db.Float, nullable=False, default=0)
+    category = db.Column(db.String(80), nullable=False, default="Piping")
+    notes = db.Column(db.String(250), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
+class ProjectCableEstimate(db.Model):
+    """Cable estimate with saved specifications for catalogue or manual entries."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("project.id"),
+        nullable=False,
+        index=True,
+    )
+    cable_id = db.Column(
+        db.Integer,
+        db.ForeignKey("cable.id"),
+        nullable=True,
+    )
+
+    # Saved cable details: these remain available even if the catalogue changes.
+    cable_type = db.Column(db.String(150), nullable=True)
+    brand = db.Column(db.String(100), nullable=True)
+    size = db.Column(db.String(50), nullable=True)
+    colour = db.Column(db.String(50), nullable=True)
+    function = db.Column(db.String(100), nullable=True)
+    conductor_material = db.Column(db.String(100), nullable=True)
+    insulation = db.Column(db.String(100), nullable=True)
+
+    required_metres = db.Column(db.Float, nullable=False)
+    coil_length = db.Column(db.Float, nullable=False)
+    unit_price = db.Column(db.Float, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    project = db.relationship("Project")
+    cable = db.relationship("Cable")

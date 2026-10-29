@@ -16,17 +16,30 @@ db = SQLAlchemy()
 migrate = Migrate()
 
 
-def create_app():
+def create_app(test_config=None):
     app = Flask(__name__)
 
     app.config["SECRET_KEY"] = "sancta-tech-local-development-key"
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+    if test_config:
+        app.config.update(test_config)
+
     db.init_app(app)
     migrate.init_app(app, db)
 
-    from app.models import Project, Room, ElectricalPoint, Circuit, Cable, BOQItem, MaterialPrice
+    from app.models import (
+        Project,
+        Room,
+        ElectricalPoint,
+        Circuit,
+        Cable,
+        BOQItem,
+        MaterialPrice,
+        ProjectMaterial,
+        ProjectCableEstimate,
+    )
 
     @app.route("/")
     def home():
@@ -330,12 +343,350 @@ def create_app():
             project_id=project.id
         ).order_by(ElectricalPoint.id.asc()).all()
 
+        piping_materials = ProjectMaterial.query.filter_by(
+            project_id=project.id
+        ).order_by(ProjectMaterial.id.asc()).all()
+
+        piping_total = sum(item.amount for item in piping_materials)
+
+        from app.services.cable_service import calculate_coils
+
+        project_cable_estimates = ProjectCableEstimate.query.filter_by(
+            project_id=project.id
+        ).order_by(ProjectCableEstimate.id.asc()).all()
+
+        available_cables = Cable.query.order_by(
+            Cable.cable_type.asc(),
+            Cable.size.asc(),
+            Cable.colour.asc(),
+        ).all()
+
+        cable_estimate_rows = []
+        cable_total = 0
+
+        for estimate in project_cable_estimates:
+            calculation = calculate_coils(
+                estimate.required_metres,
+                estimate.coil_length,
+            )
+            amount = calculation["number_of_coils"] * estimate.unit_price
+            cable_total += amount
+
+            cable_estimate_rows.append({
+                "estimate": estimate,
+                "number_of_coils": calculation["number_of_coils"],
+                "supplied_metres": calculation["supplied_metres"],
+                "spare_metres": calculation["spare_metres"],
+                "amount": amount,
+            })
+
         return render_template(
             "project_detail.html",
             project=project,
             rooms=rooms,
             electrical_points=electrical_points,
+            piping_materials=piping_materials,
+            piping_total=piping_total,
+            available_cables=available_cables,
+            cable_estimate_rows=cable_estimate_rows,
+            cable_total=cable_total,
         )
+
+    @app.route(
+        "/projects/<int:project_id>/cable-estimates",
+        methods=["POST"],
+    )
+    def add_project_cable_estimate(project_id):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        try:
+            required = float(request.form.get("required_metres", ""))
+            mode = request.form.get("entry_mode", "catalogue")
+            cable = None
+
+            if mode == "catalogue":
+                cable_id = int(request.form.get("cable_id", ""))
+                cable = db.session.get(Cable, cable_id)
+                if cable is None:
+                    raise ValueError("Select a valid catalogue cable.")
+
+                cable_type = cable.cable_type.strip()
+                brand = (cable.brand or "").strip()
+                size = cable.size.strip()
+                colour = cable.colour.strip()
+                function = (cable.function or "").strip()
+                conductor_material = (cable.conductor_material or "").strip()
+                insulation = (cable.insulation or "").strip()
+                coil_length = float(cable.coil_length)
+                price = float(cable.unit_price or 0)
+            else:
+                cable_type = request.form.get("manual_cable_type", "").strip()
+                brand = request.form.get("manual_brand", "").strip()
+                size = request.form.get("manual_size", "").strip()
+                colour = request.form.get("manual_colour", "").strip()
+                function = request.form.get("manual_function", "").strip()
+                conductor_material = request.form.get("manual_conductor_material", "").strip()
+                insulation = request.form.get("manual_insulation", "").strip()
+                coil_length = float(request.form.get("manual_coil_length", ""))
+                price = float(request.form.get("manual_unit_price", "0") or 0)
+
+            if required <= 0 or coil_length <= 0 or price < 0:
+                raise ValueError("Metres and coil length must be positive; price cannot be negative.")
+            if not cable_type or not size or not colour:
+                raise ValueError("Cable type, size and colour are required.")
+
+            estimate = ProjectCableEstimate(
+                project_id=project.id,
+                cable_id=cable.id if cable else None,
+                cable_type=cable_type,
+                brand=brand or None,
+                size=size,
+                colour=colour,
+                function=function or None,
+                conductor_material=conductor_material or None,
+                insulation=insulation or None,
+                required_metres=required,
+                coil_length=coil_length,
+                unit_price=price,
+            )
+            db.session.add(estimate)
+            db.session.commit()
+            flash("Cable estimate added successfully.")
+
+        except (TypeError, ValueError) as exc:
+            db.session.rollback()
+            flash(str(exc) or "Enter valid cable details.")
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unable to add project cable estimate")
+            flash("Could not save the cable estimate.")
+
+        return redirect(url_for("project_detail", project_id=project.id))
+
+
+    @app.route(
+        "/projects/<int:project_id>/cable-estimates/<int:estimate_id>/edit",
+        methods=["POST"],
+    )
+    def edit_project_cable_estimate(project_id, estimate_id):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        estimate = db.session.get(ProjectCableEstimate, estimate_id)
+        if estimate is None or estimate.project_id != project.id:
+            abort(404)
+
+        try:
+            required = float(request.form.get("required_metres", ""))
+            mode = request.form.get("entry_mode", "manual")
+            cable = None
+
+            if mode == "catalogue":
+                cable_id = int(request.form.get("cable_id", ""))
+                cable = db.session.get(Cable, cable_id)
+                if cable is None:
+                    raise ValueError("Select a valid catalogue cable.")
+
+                cable_type = cable.cable_type.strip()
+                brand = (cable.brand or "").strip()
+                size = cable.size.strip()
+                colour = cable.colour.strip()
+                function = (cable.function or "").strip()
+                conductor_material = (cable.conductor_material or "").strip()
+                insulation = (cable.insulation or "").strip()
+                coil_length = float(cable.coil_length)
+                price = float(cable.unit_price or 0)
+            else:
+                cable_type = request.form.get("manual_cable_type", "").strip()
+                brand = request.form.get("manual_brand", "").strip()
+                size = request.form.get("manual_size", "").strip()
+                colour = request.form.get("manual_colour", "").strip()
+                function = request.form.get("manual_function", "").strip()
+                conductor_material = request.form.get("manual_conductor_material", "").strip()
+                insulation = request.form.get("manual_insulation", "").strip()
+                coil_length = float(request.form.get("manual_coil_length", ""))
+                price = float(request.form.get("manual_unit_price", "0") or 0)
+
+            if required <= 0 or coil_length <= 0 or price < 0:
+                raise ValueError("Metres and coil length must be positive; price cannot be negative.")
+            if not cable_type or not size or not colour:
+                raise ValueError("Cable type, size and colour are required.")
+
+            estimate.cable_id = cable.id if cable else None
+            estimate.cable_type = cable_type
+            estimate.brand = brand or None
+            estimate.size = size
+            estimate.colour = colour
+            estimate.function = function or None
+            estimate.conductor_material = conductor_material or None
+            estimate.insulation = insulation or None
+            estimate.required_metres = required
+            estimate.coil_length = coil_length
+            estimate.unit_price = price
+            db.session.commit()
+            flash("Cable estimate updated successfully.")
+
+        except (TypeError, ValueError) as exc:
+            db.session.rollback()
+            flash(str(exc) or "Enter valid cable details.")
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unable to update project cable estimate")
+            flash("Could not update the cable estimate.")
+
+        return redirect(url_for("project_detail", project_id=project.id))
+
+
+    @app.route(
+        "/projects/<int:project_id>/cable-estimates/<int:estimate_id>/delete",
+        methods=["POST"],
+    )
+    def delete_project_cable_estimate(project_id, estimate_id):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        estimate = db.session.get(ProjectCableEstimate, estimate_id)
+        if estimate is None or estimate.project_id != project.id:
+            abort(404)
+
+        try:
+            db.session.delete(estimate)
+            db.session.commit()
+            flash("Cable estimate deleted successfully.")
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unable to delete project cable estimate")
+            flash("Could not delete the cable estimate.")
+
+        return redirect(url_for("project_detail", project_id=project.id))
+
+
+    @app.route(
+        "/projects/<int:project_id>/piping-materials",
+        methods=["POST"],
+    )
+    def add_piping_material(project_id):
+        project = db.session.get(Project, project_id)
+
+        if project is None:
+            abort(404)
+
+        material_name = request.form.get("material_name", "").strip()
+        unit = request.form.get("unit", "").strip()
+        category = request.form.get("category", "Piping").strip() or "Piping"
+        notes = request.form.get("notes", "").strip()
+
+        try:
+            quantity = float(request.form.get("quantity", ""))
+            unit_price = float(request.form.get("unit_price", ""))
+
+            if not material_name or not unit:
+                raise ValueError("Material name and unit are required.")
+            if quantity <= 0 or unit_price < 0:
+                raise ValueError("Quantity must be positive and price cannot be negative.")
+
+            item = ProjectMaterial(
+                project_id=project.id,
+                material_name=material_name,
+                unit=unit,
+                quantity=quantity,
+                unit_price=unit_price,
+                amount=round(quantity * unit_price, 2),
+                category=category,
+                notes=notes or None,
+            )
+            db.session.add(item)
+            db.session.commit()
+            flash("Piping material added successfully.")
+
+        except (ValueError, TypeError):
+            db.session.rollback()
+            flash("Enter a material name, unit, positive quantity, and valid non-negative price.")
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unable to save piping material")
+            flash("Could not save the piping material.")
+
+        return redirect(url_for("project_detail", project_id=project.id))
+
+
+    @app.route(
+        "/projects/<int:project_id>/piping-materials/<int:item_id>/edit",
+        methods=["POST"],
+    )
+    def edit_piping_material(project_id, item_id):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        item = db.session.get(ProjectMaterial, item_id)
+        if item is None or item.project_id != project.id:
+            abort(404)
+
+        material_name = request.form.get("material_name", "").strip()
+        unit = request.form.get("unit", "").strip()
+        category = request.form.get("category", "Piping").strip() or "Piping"
+        notes = request.form.get("notes", "").strip()
+
+        try:
+            quantity = float(request.form.get("quantity", ""))
+            unit_price = float(request.form.get("unit_price", ""))
+
+            if not material_name or not unit:
+                raise ValueError
+            if quantity <= 0 or unit_price < 0:
+                raise ValueError
+
+            item.material_name = material_name
+            item.unit = unit
+            item.category = category
+            item.notes = notes or None
+            item.quantity = quantity
+            item.unit_price = unit_price
+            item.amount = round(quantity * unit_price, 2)
+
+            db.session.commit()
+            flash("Piping material updated successfully.")
+
+        except (ValueError, TypeError):
+            db.session.rollback()
+            flash("Enter a material name, unit, positive quantity, and valid non-negative price.")
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unable to update piping material")
+            flash("Could not update the piping material.")
+
+        return redirect(url_for("project_detail", project_id=project.id))
+
+
+    @app.route(
+        "/projects/<int:project_id>/piping-materials/<int:item_id>/delete",
+        methods=["POST"],
+    )
+    def delete_piping_material(project_id, item_id):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        item = db.session.get(ProjectMaterial, item_id)
+        if item is None or item.project_id != project.id:
+            abort(404)
+
+        try:
+            db.session.delete(item)
+            db.session.commit()
+            flash("Piping material deleted successfully.")
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unable to delete piping material")
+            flash("Could not delete the piping material.")
+
+        return redirect(url_for("project_detail", project_id=project.id))
+
 
     @app.route(
         "/projects/<int:project_id>/rooms",
@@ -663,6 +1014,9 @@ def create_app():
             try:
                 if action == "add_cable":
                     cable_type = request.form.get("cable_type", "").strip()
+                    brand = request.form.get("brand", "").strip() or None
+                    conductor_material = request.form.get("conductor_material", "").strip() or None
+                    insulation = request.form.get("insulation", "").strip() or None
                     size = request.form.get("size", "").strip()
                     colour = request.form.get("colour", "").strip()
                     function = request.form.get("function", "").strip()
@@ -682,6 +1036,9 @@ def create_app():
                     else:
                         cable = Cable(
                             cable_type=cable_type,
+                            brand=brand,
+                            conductor_material=conductor_material,
+                            insulation=insulation,
                             size=size,
                             colour=colour,
                             function=function,
@@ -725,6 +1082,9 @@ def create_app():
                         flash("Cable record not found.")
                     else:
                         cable_type = request.form.get("cable_type", "").strip()
+                        brand = request.form.get("brand", "").strip() or None
+                        conductor_material = request.form.get("conductor_material", "").strip() or None
+                        insulation = request.form.get("insulation", "").strip() or None
                         size = request.form.get("size", "").strip()
                         colour = request.form.get("colour", "").strip()
                         function = request.form.get("function", "").strip()
@@ -744,6 +1104,9 @@ def create_app():
                             flash("Stock quantity cannot be negative.")
                         else:
                             cable.cable_type = cable_type
+                            cable.brand = brand
+                            cable.conductor_material = conductor_material
+                            cable.insulation = insulation
                             cable.size = size
                             cable.colour = colour
                             cable.function = function
@@ -897,6 +1260,21 @@ def create_app():
                                        placeholder="e.g. Single Core PVC Copper">
                             </div>
                             <div>
+                                <label for="new_cable_brand">Brand / manufacturer</label>
+                                <input id="new_cable_brand" name="brand" maxlength="100"
+                                       placeholder="e.g. Comester, Coman, Lagos Star">
+                            </div>
+                            <div>
+                                <label for="new_cable_material">Conductor material</label>
+                                <input id="new_cable_material" name="conductor_material" maxlength="100"
+                                       placeholder="e.g. Copper, Aluminium">
+                            </div>
+                            <div>
+                                <label for="new_cable_insulation">Insulation</label>
+                                <input id="new_cable_insulation" name="insulation" maxlength="100"
+                                       placeholder="e.g. PVC">
+                            </div>
+                            <div>
                                 <label for="new_cable_size">Size (mm²) *</label>
                                 <input id="new_cable_size" name="size"
                                        maxlength="50" required
@@ -944,6 +1322,9 @@ def create_app():
                         <thead>
                             <tr>
                                 <th>Cable Type</th>
+                                <th>Brand</th>
+                                <th>Conductor</th>
+                                <th>Insulation</th>
                                 <th>Size</th>
                                 <th>Colour</th>
                                 <th>Function</th>
@@ -957,6 +1338,9 @@ def create_app():
                             {% for cable in cables %}
                             <tr>
                                 <td>{{ cable.cable_type }}</td>
+                                <td>{{ cable.brand or "—" }}</td>
+                                <td>{{ cable.conductor_material or "—" }}</td>
+                                <td>{{ cable.insulation or "—" }}</td>
                                 <td>{{ cable.size }}</td>
                                 <td>{{ cable.colour }}</td>
                                 <td>{{ cable.function }}</td>
@@ -976,6 +1360,18 @@ def create_app():
                                         <label for="cable-type-{{ cable.id }}">Cable type</label>
                                         <input id="cable-type-{{ cable.id }}" name="cable_type"
                                                maxlength="100" value="{{ cable.cable_type }}" required>
+
+                                        <label for="cable-brand-{{ cable.id }}">Brand / manufacturer</label>
+                                        <input id="cable-brand-{{ cable.id }}" name="brand"
+                                               maxlength="100" value="{{ cable.brand or '' }}">
+
+                                        <label for="cable-material-{{ cable.id }}">Conductor material</label>
+                                        <input id="cable-material-{{ cable.id }}" name="conductor_material"
+                                               maxlength="100" value="{{ cable.conductor_material or '' }}">
+
+                                        <label for="cable-insulation-{{ cable.id }}">Insulation</label>
+                                        <input id="cable-insulation-{{ cable.id }}" name="insulation"
+                                               maxlength="100" value="{{ cable.insulation or '' }}">
 
                                         <label for="cable-size-{{ cable.id }}">Size (mm²)</label>
                                         <input id="cable-size-{{ cable.id }}" name="size"
