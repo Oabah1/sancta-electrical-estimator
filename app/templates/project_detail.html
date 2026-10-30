@@ -277,6 +277,93 @@
         </section>
 
         <section class="panel">
+            <h2>Room Fittings</h2>
+            <p>Assign fittings from the catalogue to individual rooms and enter their quantities and project prices.</p>
+
+            {% if not rooms %}
+                <p class="empty">Add a room before assigning fittings.</p>
+            {% elif not available_fittings %}
+                <p class="empty">The fitting catalogue is empty. Add fittings to the catalogue before assigning them to rooms.</p>
+            {% else %}
+                <form method="POST" action="{{ url_for('add_room_fitting', project_id=project.id) }}">
+                    <div class="form-grid">
+                        <div>
+                            <label for="fitting_room_id">Room *</label>
+                            <select id="fitting_room_id" name="room_id" required>
+                                <option value="">Select room</option>
+                                {% for room in rooms %}
+                                    <option value="{{ room.id }}">{{ room.name }} ({{ room.room_type }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="fitting_id">Fitting *</label>
+                            <select id="fitting_id" name="fitting_id" required>
+                                <option value="">Select fitting</option>
+                                {% for fitting in available_fittings %}
+                                    <option value="{{ fitting.id }}">{{ fitting.name }} — {{ fitting.category }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="fitting_quantity">Quantity *</label>
+                            <input id="fitting_quantity" name="quantity" type="number" min="0.01" step="0.01" value="1" required>
+                        </div>
+                        <div>
+                            <label for="fitting_unit_price">Unit Price (₦) *</label>
+                            <input id="fitting_unit_price" name="unit_price" type="number" min="0" step="0.01" value="0" required>
+                        </div>
+                    </div>
+                    <button class="button" type="submit">Add Room Fitting</button>
+                </form>
+            {% endif %}
+        </section>
+
+        <section class="panel">
+            <h2>Fittings in This Project</h2>
+            {% if room_fittings %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Room</th>
+                                <th>Fitting</th>
+                                <th>Category</th>
+                                <th>Quantity</th>
+                                <th>Unit</th>
+                                <th>Unit Price (₦)</th>
+                                <th>Amount (₦)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in room_fittings %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ item.room.name }}</td>
+                                    <td>{{ item.fitting.name }}</td>
+                                    <td>{{ item.fitting.category }}</td>
+                                    <td>{{ item.quantity }}</td>
+                                    <td>{{ item.fitting.unit }}</td>
+                                    <td>{{ "%.2f"|format(item.unit_price) }}</td>
+                                    <td>{{ "%.2f"|format(item.amount) }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="7">Fittings Total</th>
+                                <th>₦{{ "%.2f"|format(fitting_total) }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            {% else %}
+                <p class="empty">No fittings have been assigned to rooms in this project yet.</p>
+            {% endif %}
+        </section>
+
+        <section class="panel">
             <h2>Rooms in This Project</h2>
             {% if rooms %}
                 <div class="table-wrap">

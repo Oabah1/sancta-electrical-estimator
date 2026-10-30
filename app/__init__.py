@@ -33,6 +33,8 @@ def create_app(test_config=None):
         Project,
         Room,
         ElectricalPoint,
+        Fitting,
+        RoomFitting,
         Circuit,
         Cable,
         BOQItem,
@@ -343,6 +345,17 @@ def create_app(test_config=None):
             project_id=project.id
         ).order_by(ElectricalPoint.id.asc()).all()
 
+        available_fittings = Fitting.query.order_by(
+            Fitting.category.asc(),
+            Fitting.name.asc(),
+        ).all()
+
+        room_fittings = RoomFitting.query.join(Room).filter(
+            Room.project_id == project.id
+        ).order_by(RoomFitting.id.asc()).all()
+
+        fitting_total = sum(item.amount for item in room_fittings)
+
         piping_materials = ProjectMaterial.query.filter_by(
             project_id=project.id
         ).order_by(ProjectMaterial.id.asc()).all()
@@ -385,6 +398,9 @@ def create_app(test_config=None):
             project=project,
             rooms=rooms,
             electrical_points=electrical_points,
+            available_fittings=available_fittings,
+            room_fittings=room_fittings,
+            fitting_total=fitting_total,
             piping_materials=piping_materials,
             piping_total=piping_total,
             available_cables=available_cables,
@@ -812,6 +828,60 @@ def create_app(test_config=None):
         )
 
 
+    @app.route(
+        "/projects/<int:project_id>/room-fittings",
+        methods=["POST"],
+    )
+    def add_room_fitting(project_id):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        try:
+            room_id = int(request.form.get("room_id", ""))
+            fitting_id = int(request.form.get("fitting_id", ""))
+            quantity = float(request.form.get("quantity", ""))
+            unit_price = float(request.form.get("unit_price", ""))
+
+            room = db.session.get(Room, room_id)
+            fitting = db.session.get(Fitting, fitting_id)
+
+            if room is None or room.project_id != project.id:
+                raise ValueError("Select a room belonging to this project.")
+
+            if fitting is None:
+                raise ValueError("Select a valid fitting.")
+
+            if quantity <= 0 or unit_price < 0:
+                raise ValueError("Quantity must be positive and price cannot be negative.")
+
+        except (ValueError, TypeError):
+            flash("Check the selected room, fitting, quantity and unit price.")
+            return redirect(
+                url_for("project_detail", project_id=project.id)
+            )
+
+        room_fitting = RoomFitting(
+            room_id=room.id,
+            fitting_id=fitting.id,
+            quantity=quantity,
+            unit_price=unit_price,
+        )
+
+        try:
+            db.session.add(room_fitting)
+            db.session.commit()
+            flash("Room fitting added successfully.")
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unable to save room fitting")
+            flash("The room fitting could not be saved.")
+
+        return redirect(
+            url_for("project_detail", project_id=project.id)
+        )
+
+
     @app.route("/circuits", methods=["GET", "POST"])
     def circuits():
         projects_list = Project.query.order_by(Project.project_name.asc()).all()
@@ -1049,6 +1119,34 @@ def create_app(test_config=None):
                         db.session.add(cable)
                         db.session.commit()
                         flash("New cable registered successfully.")
+                        return redirect(url_for("materials"))
+
+                elif action == "add_fitting":
+                    name = request.form.get("fitting_name", "").strip()
+                    category = request.form.get("category", "").strip()
+                    rating = request.form.get("default_rating", "").strip()
+                    load_text = request.form.get("default_load", "").strip()
+                    unit = request.form.get("fitting_unit", "").strip()
+                    description = request.form.get("fitting_description", "").strip()
+
+                    load = float(load_text) if load_text else None
+
+                    if not name or not category or not unit:
+                        flash("Fitting name, category and unit are required.")
+                    elif load is not None and load < 0:
+                        flash("Default load cannot be negative.")
+                    else:
+                        fitting = Fitting(
+                            name=name,
+                            category=category,
+                            default_rating=rating or None,
+                            default_load=load,
+                            unit=unit,
+                            description=description or None,
+                        )
+                        db.session.add(fitting)
+                        db.session.commit()
+                        flash("Fitting added to catalogue successfully.")
                         return redirect(url_for("materials"))
 
                 elif action == "add_material":
@@ -1313,6 +1411,85 @@ def create_app(test_config=None):
                         </div>
                         <p><button type="submit">Register New Cable</button></p>
                     </form>
+                </section>
+
+                <section class="panel">
+                    <h2>Register New Fitting</h2>
+                    <p>Add electrical fittings to the catalogue for assignment to project rooms.</p>
+                    <form method="post" action="{{ url_for('materials') }}">
+                        <input type="hidden" name="action" value="add_fitting">
+                        <div class="form-grid">
+                            <div>
+                                <label for="fitting_name">Fitting name *</label>
+                                <input id="fitting_name" name="fitting_name"
+                                       maxlength="100" required
+                                       placeholder="e.g. 13A Double Socket Outlet">
+                            </div>
+                            <div>
+                                <label for="fitting_category">Category *</label>
+                                <input id="fitting_category" name="category"
+                                       maxlength="100" required
+                                       placeholder="e.g. Socket, Lighting, Switching">
+                            </div>
+                            <div>
+                                <label for="fitting_rating">Default rating</label>
+                                <input id="fitting_rating" name="default_rating"
+                                       maxlength="50"
+                                       placeholder="e.g. 13A, 10AX">
+                            </div>
+                            <div>
+                                <label for="fitting_load">Default load (W)</label>
+                                <input id="fitting_load" name="default_load"
+                                       type="number" min="0" step="0.1"
+                                       placeholder="e.g. 12">
+                            </div>
+                            <div>
+                                <label for="fitting_unit">Unit *</label>
+                                <input id="fitting_unit" name="fitting_unit"
+                                       maxlength="50" required value="pcs"
+                                       placeholder="e.g. pcs, set">
+                            </div>
+                            <div>
+                                <label for="fitting_description">Description</label>
+                                <input id="fitting_description" name="fitting_description"
+                                       maxlength="200"
+                                       placeholder="Optional specification">
+                            </div>
+                        </div>
+                        <p><button type="submit">Add Fitting to Catalogue</button></p>
+                    </form>
+                </section>
+
+                <section class="panel">
+                    <h2>Fitting Catalogue</h2>
+                    {% if fittings %}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Fitting</th>
+                                <th>Category</th>
+                                <th>Default Rating</th>
+                                <th>Default Load (W)</th>
+                                <th>Unit</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for fitting in fittings %}
+                            <tr>
+                                <td>{{ fitting.name }}</td>
+                                <td>{{ fitting.category }}</td>
+                                <td>{{ fitting.default_rating or "—" }}</td>
+                                <td>{{ fitting.default_load if fitting.default_load is not none else "—" }}</td>
+                                <td>{{ fitting.unit }}</td>
+                                <td>{{ fitting.description or "—" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="empty">No fittings have been registered yet.</p>
+                    {% endif %}
                 </section>
 
                 <section class="panel">

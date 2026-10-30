@@ -179,3 +179,33 @@ class ProjectCableEstimate(db.Model):
 
     project = db.relationship("Project")
     cable = db.relationship("Cable")
+
+
+class RoomFitting(db.Model):
+    """A fitting assigned to a room, with its project-specific price."""
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    room_id = db.Column(
+        db.Integer,
+        db.ForeignKey("room.id"),
+        nullable=False,
+        index=True,
+    )
+
+    fitting_id = db.Column(
+        db.Integer,
+        db.ForeignKey("fitting.id"),
+        nullable=False,
+        index=True,
+    )
+
+    quantity = db.Column(db.Float, nullable=False, default=1)
+    unit_price = db.Column(db.Float, nullable=False, default=0)
+
+    room = db.relationship("Room")
+    fitting = db.relationship("Fitting")
+
+    @property
+    def amount(self):
+        return self.quantity * self.unit_price
